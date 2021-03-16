@@ -1,5 +1,5 @@
 require 'dragonfly'
-require 'azure/storage/blob'
+require 'azure/storage/file'
 require 'yaml'
 
 Dragonfly::App.register_datastore(:azure) { Dragonfly::AzureDataStore }
@@ -21,19 +21,20 @@ module Dragonfly
     end
 
     def write(content, _opts = {})
-      filename = path_for(content.name || 'file')
-      path = full_path(filename)
+      uid = path_for(content.name || 'file')
+      directory_path = full_path(uid).split("/")[0...-1].join("/")
+      filename = full_path(uid).split("/").last
       options = {}
       options[:metadata] = content.meta if store_meta
       content.file do |f|
-        storage(:create_block_blob, container_name, path, f, options)
+        storage(:create_file_from_content, container_name, directory_path, filename, content.size, f, options = {})
       end
-      filename
+      uid
     end
 
     def read(uid)
       path = full_path(uid)
-      result, body = storage(:get_blob, container_name, path)
+      result, body = storage(:get_file, container_name, root_path, uid)
       meta = result.metadata
       meta = meta_from_file(path) if legacy_meta && (meta.nil? || meta.empty?)
       [body, meta]
@@ -46,19 +47,19 @@ module Dragonfly
     def update_metadata(uid)
       return false unless store_meta
       path = full_path(uid)
-      meta = storage(:get_blob, container_name, path)[0].metadata
+      meta = storage(:get_file, container_name, path)[0].metadata
       return false if meta.present?
       meta = meta_from_file(path)
       return false if meta.blank?
-      storage(:set_blob_metadata, container_name, path, meta)
-      storage(:delete_blob, container_name, meta_path(path))
+      storage(:set_file_metadata, container_name, path, meta)
+      storage(:delete_file, container_name, meta_path(path))
       true
     rescue Azure::Core::Http::HTTPError
       nil
     end
 
     def destroy(uid)
-      storage(:delete_blob, container_name, full_path(uid))
+      storage(:delete_file, container_name, full_path(uid))
       true
     rescue Azure::Core::Http::HTTPError
       false
@@ -67,7 +68,7 @@ module Dragonfly
     def url_for(uid, opts = {})
       scheme = opts[:scheme] || url_scheme
       host   = opts[:host]   || url_host ||
-               "#{account_name}.blob.core.windows.net"
+               "#{account_name}.file.core.windows.net"
       "#{scheme}://#{host}/#{container_name}/#{full_path(uid)}"
     end
 
@@ -76,7 +77,7 @@ module Dragonfly
     def storage(method, *params)
       tries ||= 2
       @storage ||=
-        Azure::Storage::Blob::BlobService.create(
+        Azure::Storage::File::FileService.create(
           storage_account_name: account_name,
           storage_access_key: access_key
         )
@@ -109,8 +110,8 @@ module Dragonfly
     end
 
     def meta_from_file(path)
-      meta_blob = storage(:get_blob, container_name, meta_path(path))
-      YAML.safe_load(meta_blob[1])
+      meta_file = storage(:get_file, container_name, meta_path(path))
+      YAML.safe_load(meta_file[1])
     rescue Azure::Core::Http::HTTPError
       {}
     end

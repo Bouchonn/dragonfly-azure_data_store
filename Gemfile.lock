@@ -2,7 +2,7 @@ PATH
   remote: .
   specs:
     dragonfly-azure_data_store (0.1.1)
-      azure-storage-blob (~> 1.0)
+      azure-storage-file (~> 1.0.1)
       dragonfly (~> 1.0)
 
 GEM
@@ -14,12 +14,12 @@ GEM
       faraday (~> 0.9)
       faraday_middleware (~> 0.10)
       nokogiri (~> 1.6)
-    azure-storage-blob (1.0.1)
+    azure-storage-common (1.1.0)
+      azure-core (~> 0.1.13)
+      nokogiri (~> 1.6, >= 1.6.8)
+    azure-storage-file (1.0.1)
       azure-core (~> 0.1.13)
       azure-storage-common (~> 1.0)
-      nokogiri (~> 1.6, >= 1.6.8)
-    azure-storage-common (1.0.1)
-      azure-core (~> 0.1.13)
       nokogiri (~> 1.6, >= 1.6.8)
     byebug (10.0.0)
     coderay (1.1.2)
