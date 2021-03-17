@@ -28,7 +28,7 @@ module Dragonfly
       options = {}
       options[:metadata] = content.meta if store_meta
       content.file do |f|
-        storage(:create_file_from_content, container_name, directory_path, filename, content.size, f, options = {})
+        storage(:create_file_from_content, container_name, directory_path, filename, content.size, f, options)
       end
       uid
     end
@@ -37,8 +37,15 @@ module Dragonfly
       path = full_path(uid)
       result, body = storage(:get_file, container_name, root_path, uid)
       meta = result.metadata
-      meta = meta_from_file(path) if legacy_meta && (meta.nil? || meta.empty?)
-      [body, meta]
+      meta = meta_from_file(uid) if legacy_meta && (meta.nil? || meta.empty?)
+      if meta.nil? || meta.empty?
+        directory_path = full_path(uid).split("/")[0...-1].join("/")
+        filename = full_path(uid).split("/").last
+        storage(:set_file_metadata, container_name, directory_path, filename, {name: filename}, options = {})
+        read(uid)
+      else
+        [body, meta]
+      end      
     rescue Azure::Core::Http::HTTPError
       nil
     end
@@ -48,19 +55,22 @@ module Dragonfly
     def update_metadata(uid)
       return false unless store_meta
       path = full_path(uid)
-      meta = storage(:get_file, container_name, path)[0].metadata
+      meta = storage(:get_file, container_name, root_path, uid)[0].metadata
       return false if meta.present?
-      meta = meta_from_file(path)
+      meta = meta_from_file(uid)
       return false if meta.blank?
-      storage(:set_file_metadata, container_name, path, meta)
-      storage(:delete_file, container_name, meta_path(path))
+      filename = full_path(uid).split("/").last.gsub('.meta', '')
+      storage(:set_file_metadata,container_name, root_path, filename, metadata, options = {})
+      storage(:delete_file, container_name, root_path, uid)
       true
-    rescue Azure::Core::Http::HTTPError
-      nil
+    #rescue Azure::Core::Http::HTTPError
+      #nil
     end
 
     def destroy(uid)
-      storage(:delete_file, container_name, full_path(uid))
+      filename = full_path(uid).split("/").last
+      directory_path = full_path(uid).split("/")[0...-1].join("/")
+      storage(:delete_file, container_name, directory_path, filename, options = {})
       true
     rescue Azure::Core::Http::HTTPError
       false
@@ -110,8 +120,11 @@ module Dragonfly
       "#{path}.meta.yml"
     end
 
-    def meta_from_file(path)
-      meta_file = storage(:get_file, container_name, meta_path(path))
+    def meta_from_file(uid)
+      filename = full_path(uid).split("/").last
+      directory_path = full_path(uid).split("/")[0...-1].join("/")
+      meta_file = storage(:get_file, container_name, directory_path, meta_path(filename), {})
+      meta_file[1]
       YAML.safe_load(meta_file[1])
     rescue Azure::Core::Http::HTTPError
       {}
