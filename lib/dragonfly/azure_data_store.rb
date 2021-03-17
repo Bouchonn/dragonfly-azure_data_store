@@ -24,6 +24,7 @@ module Dragonfly
       uid = path_for(content.name || 'file')
       directory_path = full_path(uid).split("/")[0...-1].join("/")
       filename = full_path(uid).split("/").last
+      create_parent_directory "", directory_path
       options = {}
       options[:metadata] = content.meta if store_meta
       content.file do |f|
@@ -114,6 +115,17 @@ module Dragonfly
       YAML.safe_load(meta_file[1])
     rescue Azure::Core::Http::HTTPError
       {}
+    end
+
+    def create_parent_directory(path, directory_path)
+      directory_path_array = (directory_path.split("/")- [""])
+      first_parent = directory_path_array.first
+      first_parent_path = "#{path}/#{first_parent}"
+      return unless first_parent.present?
+      storage(:create_directory, container_name, first_parent_path)
+      create_parent_directory(first_parent_path, directory_path_array.drop(1).try(:join, '/'))
+    rescue Azure::Core::Http::HTTPError
+      create_parent_directory(first_parent_path, directory_path_array.drop(1).try(:join, '/'))
     end
   end
 end
