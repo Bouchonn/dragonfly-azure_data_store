@@ -51,6 +51,7 @@ module Dragonfly
       rescue Azure::Core::Http::HTTPError
         raise if (tries -= 1).zero?
         retry
+      end
     end
 
     # Updates metadata of file and deletes old meta file from legacy mode.
