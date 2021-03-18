@@ -34,20 +34,23 @@ module Dragonfly
     end
 
     def read(uid)
-      path = full_path(uid)
-      result, body = storage(:get_file, container_name, root_path, uid)
-      meta = result.metadata
-      meta = meta_from_file(uid) if legacy_meta && (meta.nil? || meta.empty?)
-      if meta.nil? || meta.empty?
-        directory_path = full_path(uid).split("/")[0...-1].join("/")
-        filename = full_path(uid).split("/").last
-        storage(:set_file_metadata, container_name, directory_path, filename, {name: filename}, options = {})
-        read(uid)
-      else
-        [body, meta]
-      end      
-    rescue Azure::Core::Http::HTTPError
-      nil
+      begin
+        tries ||= 2
+        path = full_path(uid)
+        result, body = storage(:get_file, container_name, root_path, uid)
+        meta = result.metadata
+        meta = meta_from_file(uid) if legacy_meta && (meta.nil? || meta.empty?)
+        if meta.nil? || meta.empty?
+          directory_path = full_path(uid).split("/")[0...-1].join("/")
+          filename = full_path(uid).split("/").last
+          storage(:set_file_metadata, container_name, directory_path, filename, {name: filename}, options = {})
+          read(uid)
+        else
+          [body, meta]
+        end      
+      rescue Azure::Core::Http::HTTPError
+        raise if (tries -= 1).zero?
+        retry
     end
 
     # Updates metadata of file and deletes old meta file from legacy mode.
